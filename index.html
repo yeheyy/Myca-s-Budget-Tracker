@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Myca's Budget Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #ffdde1, #ee9ca7);
+            color: #5a3e36;
+        }
+        .font-fredoka {
+            font-family: 'Fredoka One', cursive;
+        }
+        .kawaii-card {
+            background-color: rgba(255, 255, 255, 0.8);
+            border: 2px solid #fff;
+            border-radius: 20px;
+            box-shadow: 0 10px 20px rgba(238, 156, 167, 0.5);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease;
+        }
+        .kawaii-card:hover {
+            transform: translateY(-5px);
+        }
+        .btn-kawaii {
+            border: none;
+            border-radius: 12px;
+            padding: 10px 20px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .btn-add {
+            background-color: #ff9a8b;
+            color: white;
+        }
+        .btn-add:hover {
+            background-color: #ff6a88;
+            transform: scale(1.05);
+        }
+        .btn-edit {
+            background-color: #f7d794;
+            color: #5a3e36;
+        }
+        .btn-delete {
+            background-color: #f8a5c2;
+            color: white;
+        }
+        .category-header {
+            border-radius: 15px 15px 0 0;
+            padding: 12px;
+            color: white;
+            font-size: 1.25rem;
+        }
+        input, select {
+            border: 2px solid #f8a5c2;
+            border-radius: 10px;
+            padding: 8px 12px;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #ff6a88;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 20px;
+            animation: fadeIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from {opacity: 0; transform: scale(0.9);}
+            to {opacity: 1; transform: scale(1.0);}
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="container mx-auto max-w-7xl">
+        <header class="text-center mb-8">
+            <h1 class="text-5xl font-fredoka text-white" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.2);">
+                <i class="fas fa-piggy-bank mr-2"></i> Myca's Budget Tracker
+            </h1>
+            <p class="text-white opacity-90 mt-2">Let's track our spending in the cutest way possible!</p>
+        </header>
+
+        <!-- Add Expense Form -->
+        <div id="add-expense-card" class="kawaii-card p-6 mb-8">
+            <h2 class="text-2xl font-fredoka text-pink-500 mb-4">Add a New Sparkle (Expense)</h2>
+            <form id="expense-form" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                <div>
+                    <label for="category" class="font-bold mb-1 block">Category <i class="fas fa-folder-open"></i></label>
+                    <select id="category" name="category" class="w-full" required>
+                        <option value="bpi">Credit Card - BPI</option>
+                        <option value="security-bank">Credit Card - Security Bank</option>
+                        <option value="food">Food Expenses</option>
+                        <option value="shopping">Shopping Expenses</option>
+                        <option value="allowance">Sister’s Allowance</option>
+                        <option value="pamper">Pamper Expenses</option>
+                        <option value="other">Other Expenses</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="date" class="font-bold mb-1 block">Date <i class="fas fa-calendar-alt"></i></label>
+                    <input type="date" id="date" name="date" class="w-full" required>
+                </div>
+                <div>
+                    <label for="description" class="font-bold mb-1 block">Description <i class="fas fa-pencil-alt"></i></label>
+                    <input type="text" id="description" name="description" placeholder="e.g., Cute stickers" class="w-full" required>
+                </div>
+                <div>
+                    <label for="amount" class="font-bold mb-1 block">Amount <i class="fas fa-coins"></i></label>
+                    <input type="number" id="amount" name="amount" placeholder="100.00" step="0.01" class="w-full" required>
+                </div>
+                <button type="submit" class="btn-kawaii btn-add h-10 md:mt-0 mt-4">Add Expense</button>
+            </form>
+        </div>
+        
+        <!-- Summary and Chart -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+            <div id="total-expenses-card" class="kawaii-card p-6 lg:col-span-1 text-center">
+                <h2 class="text-2xl font-fredoka text-pink-500 mb-2">Total Monthly Sparkles</h2>
+                <p class="text-4xl font-bold text-gray-700" id="total-expenses">₱0.00</p>
+            </div>
+            <div id="chart-card" class="kawaii-card p-6 lg:col-span-2">
+                 <h2 class="text-2xl font-fredoka text-pink-500 mb-4 text-center">Spending Rainbow</h2>
+                <canvas id="expense-chart"></canvas>
+            </div>
+        </div>
+
+
+        <!-- Expense Categories -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="categories-grid">
+            <!-- Categories will be dynamically inserted here -->
+        </div>
+        
+        <!-- History Log -->
+        <div id="history-card" class="kawaii-card p-6 mt-8">
+            <h2 class="text-2xl font-fredoka text-pink-500 mb-4"><i class="fas fa-history"></i> Activity History</h2>
+            <ul id="history-log" class="space-y-2 max-h-60 overflow-y-auto">
+                <!-- History items will be here -->
+            </ul>
+        </div>
+    </div>
+    
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-content kawaii-card">
+             <h2 class="text-2xl font-fredoka text-pink-500 mb-4">Edit Sparkle</h2>
+             <form id="edit-form">
+                <input type="hidden" id="edit-id">
+                <div class="mb-4">
+                    <label for="edit-date" class="font-bold mb-1 block">Date</label>
+                    <input type="date" id="edit-date" class="w-full" required>
+                </div>
+                 <div class="mb-4">
+                    <label for="edit-description" class="font-bold mb-1 block">Description</label>
+                    <input type="text" id="edit-description" class="w-full" required>
+                </div>
+                 <div class="mb-4">
+                    <label for="edit-amount" class="font-bold mb-1 block">Amount</label>
+                    <input type="number" id="edit-amount" step="0.01" class="w-full" required>
+                </div>
+                <div class="flex justify-end gap-3">
+                    <button type="button" id="cancel-edit" class="btn-kawaii bg-gray-300">Cancel</button>
+                    <button type="submit" class="btn-kawaii btn-add">Save Changes</button>
+                </div>
+             </form>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- STATE MANAGEMENT ---
+            let expenses = JSON.parse(localStorage.getItem('expenses')) || [];
+            let history = JSON.parse(localStorage.getItem('history')) || [];
+            const expenseForm = document.getElementById('expense-form');
+            const categoriesGrid = document.getElementById('categories-grid');
+            const totalExpensesEl = document.getElementById('total-expenses');
+            const historyLog = document.getElementById('history-log');
+            
+            // Edit Modal elements
+            const editModal = document.getElementById('edit-modal');
+            const editForm = document.getElementById('edit-form');
+            const cancelEditBtn = document.getElementById('cancel-edit');
+
+
+            const categoryConfig = {
+                'bpi': { title: '💳 Credit Card - BPI', color: '#8ecae6' },
+                'security-bank': { title: '💳 Credit Card - Security Bank', color: '#219ebc' },
+                'food': { title: '🍔 Food Expenses', color: '#ffb703' },
+                'shopping': { title: '🛍️ Shopping Expenses', color: '#fb8500' },
+                'allowance': { title: '💖 Sister’s Allowance', color: '#e63946' },
+                'pamper': { title: '💅 Pamper Expenses', color: '#f7a6c4' },
+                'other': { title: '✨ Other Expenses', color: '#a8dadc' }
+            };
+
+            // --- CHART ---
+            const ctx = document.getElementById('expense-chart').getContext('2d');
+            let expenseChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Expenses',
+                        data: [],
+                        backgroundColor: [],
+                        borderColor: '#fff',
+                        borderWidth: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                font: {
+                                    family: "'Poppins', sans-serif",
+                                    size: 14
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // --- FUNCTIONS ---
+            
+            const saveToLocalStorage = () => {
+                localStorage.setItem('expenses', JSON.stringify(expenses));
+                localStorage.setItem('history', JSON.stringify(history));
+            }
+
+            const addHistory = (action) => {
+                const newHistory = {
+                    action,
+                    timestamp: new Date().toLocaleString()
+                };
+                history.unshift(newHistory);
+                if (history.length > 20) {
+                   history.pop();
+                }
+                renderHistory();
+                saveToLocalStorage();
+            }
+
+            const renderHistory = () => {
+                historyLog.innerHTML = history.map(item => `
+                    <li class="text-sm p-2 bg-pink-50 rounded-lg">
+                        <span class="font-semibold">${item.action}</span>
+                        <span class="text-xs text-gray-500 float-right">${item.timestamp}</span>
+                    </li>
+                `).join('');
+            }
+            
+            const renderExpenses = () => {
+                categoriesGrid.innerHTML = '';
+                
+                Object.keys(categoryConfig).forEach(key => {
+                    const config = categoryConfig[key];
+                    const categoryExpenses = expenses.filter(e => e.category === key);
+                    const categoryTotal = categoryExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+                    const categoryCard = document.createElement('div');
+                    categoryCard.className = 'kawaii-card';
+                    categoryCard.innerHTML = `
+                        <div class="category-header font-fredoka" style="background-color: ${config.color};">
+                            ${config.title}
+                        </div>
+                        <div class="p-4">
+                             <div class="text-right font-bold text-lg mb-2" style="color: ${config.color};">
+                                Total: ₱${categoryTotal.toFixed(2)}
+                            </div>
+                            <div class="max-h-60 overflow-y-auto">
+                                <table class="w-full text-sm text-left">
+                                    <thead class="text-xs text-gray-700 uppercase">
+                                        <tr>
+                                            <th class="py-2 px-1">Date</th>
+                                            <th class="py-2 px-1">Description</th>
+                                            <th class="py-2 px-1 text-right">Amount</th>
+                                            <th class="py-2 px-1 text-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="table-body-${key}">
+                                        ${categoryExpenses.map(expense => `
+                                            <tr data-id="${expense.id}">
+                                                <td class="py-2 px-1">${expense.date}</td>
+                                                <td class="py-2 px-1">${expense.description}</td>
+                                                <td class="py-2 px-1 text-right">₱${expense.amount.toFixed(2)}</td>
+                                                <td class="py-2 px-1 text-center">
+                                                    <button class="btn-kawaii btn-edit p-1 text-xs" onclick="openEditModal('${expense.id}')"><i class="fas fa-edit"></i></button>
+                                                    <button class="btn-kawaii btn-delete p-1 text-xs" onclick="deleteExpense('${expense.id}')"><i class="fas fa-trash-alt"></i></button>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                                ${categoryExpenses.length === 0 ? '<p class="text-center text-gray-500 p-4">No sparkles here yet!</p>' : ''}
+                            </div>
+                        </div>
+                    `;
+                    categoriesGrid.appendChild(categoryCard);
+                });
+
+                updateSummary();
+                updateChart();
+                renderHistory();
+            };
+
+            const updateSummary = () => {
+                const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+                totalExpensesEl.textContent = `₱${total.toFixed(2)}`;
+            };
+            
+            const updateChart = () => {
+                const categoryTotals = Object.keys(categoryConfig).map(key => {
+                   return expenses
+                        .filter(e => e.category === key)
+                        .reduce((sum, e) => sum + e.amount, 0);
+                });
+                
+                expenseChart.data.labels = Object.values(categoryConfig).map(c => c.title);
+                expenseChart.data.datasets[0].data = categoryTotals;
+                expenseChart.data.datasets[0].backgroundColor = Object.values(categoryConfig).map(c => c.color);
+                expenseChart.update();
+            }
+
+            expenseForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const formData = new FormData(expenseForm);
+                const newExpense = {
+                    id: Date.now().toString(),
+                    category: formData.get('category'),
+                    date: formData.get('date'),
+                    description: formData.get('description'),
+                    amount: parseFloat(formData.get('amount'))
+                };
+                expenses.push(newExpense);
+                addHistory(`Added: ${newExpense.description} (₱${newExpense.amount.toFixed(2)})`);
+                saveToLocalStorage();
+                renderExpenses();
+                expenseForm.reset();
+                document.getElementById('date').valueAsDate = new Date();
+            });
+            
+            window.deleteExpense = (id) => {
+                const expenseIndex = expenses.findIndex(e => e.id === id);
+                if (expenseIndex > -1) {
+                    const deletedExpense = expenses[expenseIndex];
+                    if (confirm(`Are you sure you want to delete "${deletedExpense.description}"?`)) {
+                        expenses.splice(expenseIndex, 1);
+                        addHistory(`Deleted: ${deletedExpense.description} (₱${deletedExpense.amount.toFixed(2)})`);
+                        saveToLocalStorage();
+                        renderExpenses();
+                    }
+                }
+            };
+            
+            window.openEditModal = (id) => {
+                const expense = expenses.find(e => e.id === id);
+                if(expense) {
+                    document.getElementById('edit-id').value = expense.id;
+                    document.getElementById('edit-date').value = expense.date;
+                    document.getElementById('edit-description').value = expense.description;
+                    document.getElementById('edit-amount').value = expense.amount;
+                    editModal.style.display = 'block';
+                }
+            };
+            
+            cancelEditBtn.addEventListener('click', () => {
+                editModal.style.display = 'none';
+            });
+            
+            window.onclick = (event) => {
+                if (event.target == editModal) {
+                    editModal.style.display = 'none';
+                }
+            }
+
+            editForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = document.getElementById('edit-id').value;
+                const expenseIndex = expenses.findIndex(ex => ex.id === id);
+
+                if (expenseIndex > -1) {
+                    const oldDesc = expenses[expenseIndex].description;
+                    expenses[expenseIndex].date = document.getElementById('edit-date').value;
+                    expenses[expenseIndex].description = document.getElementById('edit-description').value;
+                    expenses[expenseIndex].amount = parseFloat(document.getElementById('edit-amount').value);
+                    
+                    addHistory(`Updated: ${oldDesc} to ${expenses[expenseIndex].description}`);
+                    saveToLocalStorage();
+                    renderExpenses();
+                    editModal.style.display = 'none';
+                }
+            });
+
+
+            // --- INITIAL RENDER ---
+            document.getElementById('date').valueAsDate = new Date();
+            renderExpenses();
+        });
+    </script>
+</body>
+</html>
+
