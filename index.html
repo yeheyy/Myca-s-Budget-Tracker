@@ -100,6 +100,11 @@
 </head>
 <body class="p-4 md:p-8">
 
+    <div id="undo-toast" class="hidden fixed bottom-5 right-5 bg-gray-800 text-white py-3 px-5 rounded-lg shadow-lg flex items-center gap-4 z-50">
+        <span>All data has been cleared.</span>
+        <button id="undo-btn" class="font-bold text-yellow-400 hover:text-yellow-300">Undo</button>
+    </div>
+
     <div class="container mx-auto max-w-7xl">
         <header class="text-center mb-4">
             <h1 class="text-5xl font-fredoka text-white" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.2);">
@@ -273,6 +278,7 @@
             let allData = JSON.parse(localStorage.getItem('budgetData')) || {};
             let history = JSON.parse(localStorage.getItem('history')) || [];
             let currentMonthKey = getCurrentMonthKey();
+            let undoTimeout;
 
             // --- ELEMENT SELECTORS ---
             const transactionForm = document.getElementById('transaction-form');
@@ -287,6 +293,8 @@
             const clearDataBtn = document.getElementById('clear-data-btn');
             const allTransactionsBody = document.getElementById('all-transactions-body');
             const monthSelector = document.getElementById('month-selector');
+            const undoToast = document.getElementById('undo-toast');
+            const undoBtn = document.getElementById('undo-btn');
 
             // Edit Modal elements
             const editModal = document.getElementById('edit-modal');
@@ -639,16 +647,57 @@
             });
 
             clearDataBtn.addEventListener('click', () => {
-                if (confirm("Are you sure you want to delete ALL data for ALL months? This action cannot be undone.")) {
+                if (confirm("Are you sure you want to delete ALL data for ALL months?")) {
+                    // Create a backup
+                    localStorage.setItem('budgetData_backup', JSON.stringify(allData));
+                    localStorage.setItem('history_backup', JSON.stringify(history));
+
+                    // Clear the actual data
                     localStorage.removeItem('budgetData');
                     localStorage.removeItem('history');
-                    // Reset state variables
                     allData = {};
                     history = [];
                     currentMonthKey = getCurrentMonthKey();
-                    // Re-render the UI
+                    
+                    // Re-render the cleared UI
                     populateMonthSelector();
                     renderUI();
+
+                    // Show the undo toast
+                    clearTimeout(undoTimeout); // Clear any existing timeout
+                    undoToast.classList.remove('hidden');
+                    
+                    // Set a timeout to hide the toast and clear the backup
+                    undoTimeout = setTimeout(() => {
+                        undoToast.classList.add('hidden');
+                        localStorage.removeItem('budgetData_backup');
+                        localStorage.removeItem('history_backup');
+                    }, 7000); // 7 seconds
+                }
+            });
+
+            undoBtn.addEventListener('click', () => {
+                // Restore data from backup
+                const backupData = localStorage.getItem('budgetData_backup');
+                const backupHistory = localStorage.getItem('history_backup');
+
+                if (backupData && backupHistory) {
+                    allData = JSON.parse(backupData);
+                    history = JSON.parse(backupHistory);
+
+                    // Save restored data back to main storage
+                    saveToLocalStorage();
+
+                    // Re-render the UI with restored data
+                    currentMonthKey = getCurrentMonthKey(); // Reset to current month view
+                    populateMonthSelector();
+                    renderUI();
+
+                    // Hide the toast and clear the backup
+                    undoToast.classList.add('hidden');
+                    clearTimeout(undoTimeout);
+                    localStorage.removeItem('budgetData_backup');
+                    localStorage.removeItem('history_backup');
                 }
             });
 
@@ -714,5 +763,4 @@
     </script>
 </body>
 </html>
-
 
