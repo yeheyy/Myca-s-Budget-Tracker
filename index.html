@@ -101,12 +101,24 @@
 <body class="p-4 md:p-8">
 
     <div class="container mx-auto max-w-7xl">
-        <header class="text-center mb-8">
+        <header class="text-center mb-4">
             <h1 class="text-5xl font-fredoka text-white" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.2);">
                 <i class="fas fa-piggy-bank mr-2"></i> Myca's Budget Tracker
             </h1>
             <p class="text-white opacity-90 mt-2">Let's track our spending in the cutest way possible!</p>
         </header>
+
+        <!-- Month Selector and Clear Button -->
+        <div class="kawaii-card p-4 mb-8 flex flex-col md:flex-row justify-center items-center gap-4">
+            <div class="flex items-center">
+                <label for="month-selector" class="font-bold text-pink-500 mr-3 text-lg"><i class="fas fa-calendar-week"></i> View Month:</label>
+                <select id="month-selector" class="rounded-lg p-2 border-2 border-pink-300 focus:border-pink-500"></select>
+            </div>
+            <button id="clear-data-btn" class="btn-kawaii bg-red-400 hover:bg-red-500 text-white py-2 px-4 text-sm">
+                <i class="fas fa-exclamation-triangle mr-2"></i> Clear All Data
+            </button>
+        </div>
+
 
         <!-- Add Transaction Form -->
         <div id="add-expense-card" class="kawaii-card p-6 mb-8">
@@ -129,6 +141,7 @@
                         <option value="allowance">Sister’s Allowance</option>
                         <option value="pamper">Pamper Expenses</option>
                         <option value="savings">Savings</option>
+                        <option value="dental">Dental Expenses</option>
                         <option value="other">Other Expenses</option>
                     </select>
                 </div>
@@ -155,7 +168,7 @@
                 <div class="kawaii-card p-6 text-center space-y-4">
                      <h2 class="text-2xl font-fredoka text-pink-500 mb-2">Financial Snapshot</h2>
                      <div>
-                        <label for="savings-amount" class="font-bold text-sm">Initial Cash on Hand</label>
+                        <label for="savings-amount" class="font-bold text-sm">Initial Cash on Hand (for this month)</label>
                         <input type="number" id="savings-amount" placeholder="Enter amount" class="w-full text-center mt-1 text-lg">
                      </div>
                      <div class="p-3 bg-green-100 rounded-lg">
@@ -188,6 +201,26 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="categories-grid">
             <!-- Categories will be dynamically inserted here -->
         </div>
+
+        <!-- All Transactions List -->
+        <div id="all-transactions-card" class="kawaii-card p-6 mt-8">
+            <h2 class="text-2xl font-fredoka text-pink-500 mb-4"><i class="fas fa-list-ul"></i> All Transactions (for selected month)</h2>
+            <div class="max-h-96 overflow-y-auto">
+                <table class="w-full text-sm text-left">
+                    <thead class="text-xs text-gray-700 uppercase bg-pink-50 sticky top-0">
+                        <tr>
+                            <th class="py-3 px-4">Date</th>
+                            <th class="py-3 px-4">Description</th>
+                            <th class="py-3 px-4">Category / Type</th>
+                            <th class="py-3 px-4 text-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="all-transactions-body">
+                        <!-- All transaction rows will be here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
         
         <!-- History Log -->
         <div id="history-card" class="kawaii-card p-6 mt-8">
@@ -196,6 +229,14 @@
                 <!-- History items will be here -->
             </ul>
         </div>
+
+        <!-- Yearly Overview -->
+        <div id="yearly-overview-card" class="kawaii-card p-6 mt-8">
+            <h2 class="text-2xl font-fredoka text-pink-500 mb-4"><i class="fas fa-chart-line"></i> Monthly Overview</h2>
+            <p class="text-sm text-gray-600 mb-4">A comparison of your total income vs. expenses across all months.</p>
+            <canvas id="yearly-overview-chart"></canvas>
+        </div>
+
     </div>
     
     <!-- Edit Modal -->
@@ -229,11 +270,11 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // --- STATE MANAGEMENT ---
-            let expenses = JSON.parse(localStorage.getItem('expenses')) || [];
-            let incomes = JSON.parse(localStorage.getItem('incomes')) || [];
+            let allData = JSON.parse(localStorage.getItem('budgetData')) || {};
             let history = JSON.parse(localStorage.getItem('history')) || [];
-            let cashOnHand = JSON.parse(localStorage.getItem('cashOnHand')) || 0;
-            
+            let currentMonthKey = getCurrentMonthKey();
+
+            // --- ELEMENT SELECTORS ---
             const transactionForm = document.getElementById('transaction-form');
             const categoriesGrid = document.getElementById('categories-grid');
             const totalCashInEl = document.getElementById('total-cash-in');
@@ -243,6 +284,9 @@
             const remainingBalanceEl = document.getElementById('remaining-balance');
             const typeSelect = document.getElementById('type');
             const categoryWrapper = document.getElementById('category-wrapper');
+            const clearDataBtn = document.getElementById('clear-data-btn');
+            const allTransactionsBody = document.getElementById('all-transactions-body');
+            const monthSelector = document.getElementById('month-selector');
 
             // Edit Modal elements
             const editModal = document.getElementById('edit-modal');
@@ -257,6 +301,7 @@
                 'allowance': { title: '💖 Sister’s Allowance', color: '#e63946' },
                 'pamper': { title: '💅 Pamper Expenses', color: '#f7a6c4' },
                 'savings': { title: '💰 Savings', color: '#90ee90'},
+                'dental': { title: '🦷 Dental Expenses', color: '#48dbfb'},
                 'other': { title: '✨ Other Expenses', color: '#a8dadc' }
             };
 
@@ -288,13 +333,73 @@
                 }
             });
 
-            // --- FUNCTIONS ---
+            const yearlyCtx = document.getElementById('yearly-overview-chart').getContext('2d');
+            let yearlyOverviewChart = new Chart(yearlyCtx, {
+                type: 'bar',
+                data: {
+                    labels: [], // e.g., ['Jan 2025', 'Feb 2025']
+                    datasets: [
+                        {
+                            label: 'Total Income',
+                            data: [],
+                            backgroundColor: '#4cd137',
+                            borderRadius: 8,
+                        },
+                        {
+                            label: 'Total Expenses',
+                            data: [],
+                            backgroundColor: '#e63946',
+                            borderRadius: 8,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ₱${context.parsed.y.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { callback: (value) => `₱${value}` }
+                        }
+                    }
+                }
+            });
+
+            // --- HELPER FUNCTIONS ---
+            function getCurrentMonthKey() {
+                const now = new Date();
+                return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+            }
+
+            function getMonthKeyFromDate(dateString) {
+                const date = new Date(dateString);
+                return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+            }
+
+            function getMonthData(monthKey) {
+                if (!allData[monthKey]) {
+                    allData[monthKey] = {
+                        incomes: [],
+                        expenses: [],
+                        cashOnHand: 0
+                    };
+                }
+                return allData[monthKey];
+            }
             
+            // --- DATA & UI FUNCTIONS ---
             const saveToLocalStorage = () => {
-                localStorage.setItem('expenses', JSON.stringify(expenses));
-                localStorage.setItem('incomes', JSON.stringify(incomes));
+                localStorage.setItem('budgetData', JSON.stringify(allData));
                 localStorage.setItem('history', JSON.stringify(history));
-                localStorage.setItem('cashOnHand', JSON.stringify(cashOnHand));
             }
 
             const addHistory = (action) => {
@@ -312,8 +417,54 @@
                         <span class="text-xs text-gray-500 float-right">${item.timestamp}</span>
                     </li>`).join('');
             }
+
+            const populateMonthSelector = () => {
+                const monthKeys = Object.keys(allData);
+                if (!monthKeys.includes(currentMonthKey)) {
+                    monthKeys.push(currentMonthKey);
+                }
+                monthKeys.sort().reverse();
+
+                monthSelector.innerHTML = monthKeys.map(key => {
+                    const date = new Date(`${key}-02`); // Use day 02 to avoid timezone issues
+                    const monthName = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+                    return `<option value="${key}" ${key === currentMonthKey ? 'selected' : ''}>${monthName}</option>`;
+                }).join('');
+            }
+            
+            const renderAllTransactions = () => {
+                const { incomes, expenses } = getMonthData(currentMonthKey);
+
+                const allExpenses = expenses.map(e => ({...e, type: 'Expense'}));
+                const allIncomes = incomes.map(i => ({...i, type: 'Income'}));
+                
+                const allTransactions = [...allExpenses, ...allIncomes].sort((a,b) => new Date(b.date) - new Date(a.date));
+
+                if (allTransactions.length === 0) {
+                     allTransactionsBody.innerHTML = `<tr><td colspan="4" class="text-center p-8 text-gray-500">No transactions added for this month.</td></tr>`;
+                     return;
+                }
+
+                allTransactionsBody.innerHTML = allTransactions.map(t => {
+                    const isIncome = t.type === 'Income';
+                    const amountClass = isIncome ? 'text-green-600 font-bold' : 'text-red-600';
+                    const categoryText = isIncome ? 'Income' : categoryConfig[t.category]?.title || 'Other';
+
+                    return `
+                        <tr class="border-b ${isIncome ? 'bg-green-50' : 'bg-white'} hover:bg-pink-50">
+                            <td class="py-3 px-4">${t.date}</td>
+                            <td class="py-3 px-4">${t.description}</td>
+                            <td class="py-3 px-4">${categoryText}</td>
+                            <td class="py-3 px-4 text-right ${amountClass}">${isIncome ? '+' : '-'} ₱${t.amount.toFixed(2)}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
             
             const renderUI = () => {
+                const { incomes, expenses, cashOnHand } = getMonthData(currentMonthKey);
+                cashOnHandInput.value = cashOnHand > 0 ? cashOnHand : '';
+
                 categoriesGrid.innerHTML = '';
                 
                 // Render Income Card
@@ -380,9 +531,12 @@
                 updateSummary();
                 updateExpenseChart();
                 renderHistory();
+                renderAllTransactions();
+                renderYearlyOverview();
             };
 
             const updateSummary = () => {
+                const { incomes, expenses, cashOnHand } = getMonthData(currentMonthKey);
                 const totalIncomes = incomes.reduce((sum, income) => sum + income.amount, 0);
                 const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
                 const remaining = (cashOnHand + totalIncomes) - totalExpenses;
@@ -405,6 +559,7 @@
             }
             
             const updateExpenseChart = () => {
+                const { expenses } = getMonthData(currentMonthKey);
                 const categoryTotals = Object.keys(categoryConfig).map(key => expenses.filter(e => e.category === key).reduce((sum, e) => sum + e.amount, 0));
                 expenseChart.data.labels = Object.values(categoryConfig).map(c => c.title);
                 expenseChart.data.datasets[0].data = categoryTotals;
@@ -412,23 +567,55 @@
                 expenseChart.update();
             }
 
+            const renderYearlyOverview = () => {
+                const monthKeys = Object.keys(allData).sort();
+                
+                const labels = [];
+                const incomeData = [];
+                const expenseData = [];
+
+                monthKeys.forEach(key => {
+                    const date = new Date(`${key}-02`);
+                    const monthName = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+                    labels.push(monthName);
+
+                    const monthData = getMonthData(key);
+                    const totalIncomes = monthData.incomes.reduce((sum, income) => sum + income.amount, 0);
+                    const totalExpenses = monthData.expenses.reduce((sum, expense) => sum + expense.amount, 0);
+
+                    incomeData.push(totalIncomes);
+                    expenseData.push(totalExpenses);
+                });
+
+                yearlyOverviewChart.data.labels = labels;
+                yearlyOverviewChart.data.datasets[0].data = incomeData;
+                yearlyOverviewChart.data.datasets[1].data = expenseData;
+                yearlyOverviewChart.update();
+            };
+
+            // --- EVENT LISTENERS ---
             transactionForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const formData = new FormData(transactionForm);
+                const date = formData.get('date');
+                const transactionMonthKey = getMonthKeyFromDate(date);
+                const monthData = getMonthData(transactionMonthKey);
+
                 const type = formData.get('type');
                 const amount = parseFloat(formData.get('amount'));
                 const description = formData.get('description');
                 
                 if (type === 'expense') {
-                    const newExpense = { id: Date.now().toString(), category: formData.get('category'), date: formData.get('date'), description, amount };
-                    expenses.push(newExpense);
+                    const newExpense = { id: Date.now().toString(), category: formData.get('category'), date, description, amount };
+                    monthData.expenses.push(newExpense);
                     addHistory(`Expense: ${description} (₱${amount.toFixed(2)})`);
                 } else {
-                    const newIncome = { id: Date.now().toString(), date: formData.get('date'), description, amount };
-                    incomes.push(newIncome);
+                    const newIncome = { id: Date.now().toString(), date, description, amount };
+                    monthData.incomes.push(newIncome);
                     addHistory(`Income: ${description} (₱${amount.toFixed(2)})`);
                 }
                 saveToLocalStorage();
+                populateMonthSelector(); // Update selector in case a new month was added
                 renderUI();
                 transactionForm.reset();
                 document.getElementById('date').valueAsDate = new Date();
@@ -440,12 +627,33 @@
             });
             
             cashOnHandInput.addEventListener('input', (e) => {
-                cashOnHand = parseFloat(e.target.value) || 0;
+                const monthData = getMonthData(currentMonthKey);
+                monthData.cashOnHand = parseFloat(e.target.value) || 0;
                 saveToLocalStorage();
                 updateSummary();
             });
 
+            monthSelector.addEventListener('change', (e) => {
+                currentMonthKey = e.target.value;
+                renderUI();
+            });
+
+            clearDataBtn.addEventListener('click', () => {
+                if (confirm("Are you sure you want to delete ALL data for ALL months? This action cannot be undone.")) {
+                    localStorage.removeItem('budgetData');
+                    localStorage.removeItem('history');
+                    // Reset state variables
+                    allData = {};
+                    history = [];
+                    currentMonthKey = getCurrentMonthKey();
+                    // Re-render the UI
+                    populateMonthSelector();
+                    renderUI();
+                }
+            });
+
             window.deleteTransaction = (id, type) => {
+                const { incomes, expenses } = getMonthData(currentMonthKey);
                 const array = type === 'expense' ? expenses : incomes;
                 const index = array.findIndex(item => item.id === id);
                 if (index > -1) {
@@ -460,6 +668,7 @@
             };
             
             window.openEditModal = (id, type) => {
+                const { incomes, expenses } = getMonthData(currentMonthKey);
                 const array = type === 'expense' ? expenses : incomes;
                 const item = array.find(i => i.id === id);
                 if(item) {
@@ -479,6 +688,7 @@
                 e.preventDefault();
                 const id = document.getElementById('edit-id').value;
                 const type = document.getElementById('edit-type').value;
+                const { incomes, expenses } = getMonthData(currentMonthKey);
                 const array = type === 'expense' ? expenses : incomes;
                 const index = array.findIndex(item => item.id === id);
 
@@ -497,11 +707,12 @@
 
             // --- INITIAL RENDER ---
             document.getElementById('date').valueAsDate = new Date();
-            if (cashOnHand > 0) { cashOnHandInput.value = cashOnHand; }
+            populateMonthSelector();
             typeSelect.dispatchEvent(new Event('change'));
             renderUI();
         });
     </script>
 </body>
 </html>
+
 
